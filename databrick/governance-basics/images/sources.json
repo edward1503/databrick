@@ -1,0 +1,74 @@
+[
+  {
+    "file": "databricks-logo.svg",
+    "title": "Databricks logo",
+    "publisher": "Databricks",
+    "source_page": "https://docs.databricks.com/aws/en/",
+    "asset_url": "https://docs.databricks.com/aws/en/img/logo.svg",
+    "content_type": "image/svg+xml",
+    "bytes": 4111,
+    "sha256": "c03102b5ece2bb8d041d84312078145dea749b4b4b35adc05e4ed59869c2c43a",
+    "downloaded_at": "2026-10-27T15:44:51.957126+00:00",
+    "modifications": "None; original downloaded asset"
+  },
+  {
+    "file": "databricks-logo.png",
+    "title": "Databricks logo",
+    "publisher": "Databricks",
+    "source_page": "https://www.databricks.com/company/newsroom/press-kit",
+    "asset_url": "https://www.databricks.com/sites/default/files/2023-08/databricks-default.png?v=1712162038",
+    "content_type": "image/png",
+    "bytes": 914,
+    "sha256": "861651c96789cb88a6adddaed216e6a39b80b51ad1a13283fa9f1052b4426738",
+    "downloaded_at": "2026-10-27T15:44:53.540844+00:00",
+    "modifications": "None; original downloaded asset"
+  },
+  {
+    "file": "lakehouse-architecture.png",
+    "title": "Lakehouse architecture",
+    "publisher": "Databricks",
+    "source_page": "https://docs.databricks.com/aws/en/lakehouse/",
+    "asset_url": "https://docs.databricks.com/aws/en/assets/images/lakehouse-diagram-865ba5c041f60df99ff6bee1ebaad26d.png",
+    "content_type": "image/png",
+    "bytes": 116377,
+    "sha256": "670940eccac8496208cfc0f42e13fde21be83b967a5d3ad544054a8a2ca9e364",
+    "downloaded_at": "2026-10-27T15:44:51.955629+00:00",
+    "modifications": "None; original downloaded asset"
+  },
+  {
+    "file": "unity-catalog-hierarchy.png",
+    "title": "Unity Catalog data object hierarchy",
+    "publisher": "Databricks",
+    "source_page": "https://docs.databricks.com/aws/en/data-governance/unity-catalog/securable-objects",
+    "asset_url": "https://docs.databricks.com/aws/en/assets/images/object-hierarchy-data-objects-f3cc8c2008f012e7deb38e87387dfa64.png",
+    "content_type": "image/png",
+    "bytes": 114191,
+    "sha256": "2213bb73e15414112bddfc67a32b37d1fa8eec224eff187f181f150cdf626323",
+    "downloaded_at": "2026-10-27T15:44:51.965136+00:00",
+    "modifications": "None; original downloaded asset"
+  },
+  {
+    "file": "lakeflow-jobs-example.png",
+    "title": "Lakeflow Jobs example",
+    "publisher": "Databricks",
+    "source_page": "https://docs.databricks.com/aws/en/jobs/",
+    "asset_url": "https://docs.databricks.com/aws/en/assets/images/example-job-overview-3afc40004602e65c871bd67edfa87f9b.png",
+    "content_type": "image/png",
+    "bytes": 281417,
+    "sha256": "3e56d7a12a4168a221025272a39cc8a34867718dc4175b474d4f887e0d03c2e7",
+    "downloaded_at": "2026-10-27T15:44:52.137840+00:00",
+    "modifications": "None; original downloaded asset"
+  },
+  {
+    "file": "unity-catalog-lineage.png",
+    "title": "Unity Catalog lineage",
+    "publisher": "Databricks",
+    "source_page": "https://docs.databricks.com/aws/en/data-governance/unity-catalog/data-lineage",
+    "asset_url": "https://docs.databricks.com/aws/en/assets/images/uc-lineage-overview-96ca9004e65531e65b9dfdb4f30473d6.png",
+    "content_type": "image/png",
+    "bytes": 455422,
+    "sha256": "7ef028a69b72fe4b80504c0d12c781ebe13fe90f4c5678b8b082f4956de934a5",
+    "downloaded_at": "2026-10-27T15:44:53.762860+00:00",
+    "modifications": "None; original downloaded asset"
+  }
+]

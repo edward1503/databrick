@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="190" viewBox="0 0 1000 190">
+<rect width="1000" height="190" rx="14" fill="#f2f7f5"/>
+<defs><marker id="arrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0 0L8 4L0 8Z" fill="#427265"/></marker></defs>
+<text x="500" y="29" text-anchor="middle" font-family="Segoe UI, Arial" font-size="24" font-weight="700" fill="#173e35">Đường cấp quyền đọc của Lan</text>
+<rect x="19" y="48" width="294" height="100" rx="10" fill="white" stroke="#619282" stroke-width="2"/>
+<text x="166.0" y="93.0" text-anchor="middle" font-family="Segoe UI, Arial" font-size="22" font-weight="700" fill="#173e35">Lan</text>
+<text x="166.0" y="117.0" text-anchor="middle" font-family="Segoe UI, Arial" font-size="20" font-weight="400" fill="#173e35">Thành viên nhóm analysts</text>
+<path d="M317 98.0 H346" stroke="#427265" stroke-width="2.5" marker-end="url(#arrow)"/>
+<rect x="353" y="48" width="294" height="100" rx="10" fill="white" stroke="#619282" stroke-width="2"/>
+<text x="500.0" y="93.0" text-anchor="middle" font-family="Segoe UI, Arial" font-size="22" font-weight="700" fill="#173e35">analysts</text>
+<text x="500.0" y="117.0" text-anchor="middle" font-family="Segoe UI, Arial" font-size="20" font-weight="400" fill="#173e35">SELECT ở schema gold</text>
+<path d="M651 98.0 H680" stroke="#427265" stroke-width="2.5" marker-end="url(#arrow)"/>
+<rect x="687" y="48" width="294" height="100" rx="10" fill="white" stroke="#619282" stroke-width="2"/>
+<text x="834.0" y="93.0" text-anchor="middle" font-family="Segoe UI, Arial" font-size="22" font-weight="700" fill="#173e35">Schema gold</text>
+<text x="834.0" y="117.0" text-anchor="middle" font-family="Segoe UI, Arial" font-size="20" font-weight="400" fill="#173e35">daily_sales · customer_detail</text>
+<text x="500" y="176" text-anchor="middle" font-family="Segoe UI, Arial" font-size="18" font-weight="400" fill="#173e35">Grant trực tiếp của Lan trên customer_detail đã bị thu hồi. Job ghi qua danh tính riêng.</text>
+</svg>

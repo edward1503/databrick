@@ -1,0 +1,57 @@
+\begin{infobox}{Bảng đáp án}
+\begin{tabularx}{\linewidth}{@{}*{10}{>{\centering\arraybackslash}X}@{}}
+\textbf{1} & \textbf{2} & \textbf{3} & \textbf{4} & \textbf{5} & \textbf{6} & \textbf{7} & \textbf{8} & \textbf{9} & \textbf{10} \\
+\midrule
+\textbf{C} & \textbf{B} & \textbf{D} & \textbf{A} & \textbf{C} & \textbf{B} & \textbf{A} & \textbf{B} & \textbf{D} & \textbf{C} \\
+\end{tabularx}
+\end{infobox}
+\section*{Giải thích đáp án}
+\Needspace{7\baselineskip}
+\noindent\textbf{Câu 1. Đáp án C --- Workspace, compute và catalog}\par
+\noindent\emph{Workspace tổ chức công việc; compute thực thi câu lệnh; catalog tổ chức tài sản dữ liệu.}\par
+Workspace là môi trường tổ chức notebook, file và công việc. Compute cung cấp tài nguyên thực thi; catalog nhóm các tài sản trong namespace dữ liệu. Ba thành phần có các trách nhiệm khác nhau, nên không thể suy ra quyền dữ liệu chỉ từ vị trí notebook hoặc compute đang dùng.\par\addvspace{0.8em}
+
+\Needspace{7\baselineskip}
+\noindent\textbf{Câu 2. Đáp án B --- Phạm vi của data governance}\par
+\noindent\emph{Quản lý metadata, xác định ownership, theo dõi lineage và xem xét audit log.}\par
+Governance còn liên quan đến việc hiểu dữ liệu đang có, ai chịu trách nhiệm, dữ liệu bắt nguồn từ đâu và các hoạt động sử dụng đã diễn ra. Metadata, ownership, lineage và audit hỗ trợ những nhu cầu này. Các lựa chọn còn lại tập trung vào tài nguyên tính toán hoặc công cụ làm việc.\par\addvspace{0.8em}
+
+\Needspace{7\baselineskip}
+\noindent\textbf{Câu 3. Đáp án D --- Namespace ba cấp}\par
+\noindent\emph{Catalog: lab\_governance; schema: silver; table: orders\_clean.}\par
+Namespace của bảng có dạng \texttt{catalog.schema.table}. Do đó, lab\_governance là catalog, silver là schema và orders\_clean là table. Thứ tự này giúp xác định đúng đối tượng ngay cả khi có nhiều bảng trùng tên trong các schema khác nhau.\par\addvspace{0.8em}
+
+\Needspace{7\baselineskip}
+\noindent\textbf{Câu 4. Đáp án A --- Quyền sử dụng compute và quyền dữ liệu}\par
+\noindent\emph{Quyền sử dụng compute và quyền truy cập dữ liệu thuộc các phạm vi khác nhau.}\par
+Được sử dụng warehouse cho phép user dùng tài nguyên thực thi, nhưng không tự cấp quyền đọc mọi bảng. Truy cập bảng vẫn phụ thuộc quyền dữ liệu và các quyền sử dụng namespace cha. Vì thế, cần kiểm tra cả hai phạm vi khi chẩn đoán lỗi truy vấn.\par\addvspace{0.8em}
+
+\Needspace{7\baselineskip}
+\noindent\textbf{Câu 5. Đáp án C --- Điều kiện đọc bảng Unity Catalog}\par
+\noindent\emph{Chưa; analyst cần có thêm USE SCHEMA trên schema cha.}\par
+Truy vấn đọc bảng cần quyền sử dụng catalog, quyền sử dụng schema cha và SELECT tương ứng. Giả thiết đã loại trừ đường nhận USE SCHEMA qua nhóm hoặc kế thừa, nên quyền này còn thiếu. MODIFY phục vụ thay đổi dữ liệu và không thay thế USE SCHEMA.\par\addvspace{0.8em}
+
+\Needspace{7\baselineskip}
+\noindent\textbf{Câu 6. Đáp án B --- Phạm vi và kế thừa quyền}\par
+\noindent\emph{Grant ở schema có phạm vi rộng hơn, bao gồm các bảng phù hợp hiện có và tạo sau trong schema.}\par
+Trong privilege model được trình bày, quyền dữ liệu cấp ở schema có thể kế thừa xuống các đối tượng con tương ứng, gồm cả bảng tạo sau. Grant SELECT ở một bảng có phạm vi hẹp hơn. SELECT không tự cấp các quyền thay đổi dữ liệu như UPDATE hoặc DELETE.\par\addvspace{0.8em}
+
+\Needspace{7\baselineskip}
+\noindent\textbf{Câu 7. Đáp án A --- Chẩn đoán lỗi Run as}\par
+\noindent\emph{Cấp SELECT trên \texttt{silver.orders\_clean} cho \texttt{sp\_sales} rồi chạy lại task bị lỗi.}\par
+Lỗi xảy ra khi \texttt{sp\_sales} đọc đúng một bảng, nên cấp SELECT trên bảng đó. B cấp quyền cho sai danh tính. C đổi mô hình vận hành dù không cần; D mở phạm vi quyền ra ngoài bảng cần đọc.\par\addvspace{0.8em}
+
+\Needspace{7\baselineskip}
+\noindent\textbf{Câu 8. Đáp án B --- Thiết kế quyền theo đường đọc và ghi}\par
+\noindent\emph{Cấp \texttt{sp\_etl} quyền đọc bronze, đọc/ghi silver, ghi gold trên từng bảng; cấp analyst quyền sử dụng catalog, schema gold và SELECT đúng bảng báo cáo; cấp \texttt{sp\_etl} quyền sử dụng các namespace cần thiết.}\par
+B đi theo từng cạnh đọc/ghi của pipeline và cấp quyền sử dụng các cấp cha. A vừa mở rộng quyền đọc của analyst vừa thiếu quyền ghi silver. C nhầm quyền tạo bảng với quyền thao tác trên bảng hiện có và thiếu quyền namespace cho analyst. D đổi nguồn báo cáo và nhầm quyền chạy job với quyền dữ liệu.\par\addvspace{0.8em}
+
+\Needspace{7\baselineskip}
+\noindent\textbf{Câu 9. Đáp án D --- Điều tra sai lệch doanh thu}\par
+\noindent\emph{Dùng lineage xác định nguồn và task liên quan; đối chiếu số dòng, số đơn duy nhất và phép tổng hợp theo từng tầng; xem audit để xác định hoạt động và danh tính trong khoảng thời gian đó.}\par
+Lineage định hướng nơi kiểm tra; số liệu theo từng tầng giúp tìm chỗ nhân bản hoặc tổng hợp sai; audit cung cấp dấu vết thao tác tùy sự kiện. A dùng audit sai mục đích. B không kiểm tra tính đúng của dữ liệu. C nhầm việc có đường phụ thuộc với bằng chứng phép biến đổi đúng.\par\addvspace{0.8em}
+
+\Needspace{7\baselineskip}
+\noindent\textbf{Câu 10. Đáp án C --- Thu hẹp quyền mà không làm gián đoạn job}\par
+\noindent\emph{Cấp SELECT riêng trên \texttt{daily\_sales} cho \texttt{analysts}, gỡ SELECT ở schema và rà các grant khác; thử lại bằng tài khoản analyst và xác nhận job vẫn chạy bằng danh tính riêng.}\par
+Grant cấp schema là một đường cấp quyền còn hiệu lực. C chuyển quyền đọc cần giữ xuống đúng bảng, gỡ đường cấp rộng và kiểm tra bằng đúng danh tính. A làm mất cả đường đọc báo cáo. B dùng owner nên không phản ánh quyền analyst. D tác động nhầm quyền ghi của job, không gỡ quyền đọc của Lan.\par\addvspace{0.8em}

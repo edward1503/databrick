@@ -1,0 +1,664 @@
+% Generated from the approved theory Markdown; no executable lab included.
+
+\begin{center}
+\includegraphics[width=5.5cm]{images/databricks-logo-print.png}
+\end{center}
+
+\begin{center}\scriptsize \emph{Biểu trưng Databricks. Nguồn: \href{https://docs.databricks.com/aws/en/}{Databricks Documentation}; sử dụng hình gốc.}\end{center}
+
+\begin{center}\large \emph{Từ workspace và jobs đến tổ chức dữ liệu, Unity Catalog và quyền truy cập}\end{center}
+
+\textbf{Đối tượng:} người mới học kỹ thuật dữ liệu, đã biết các câu lệnh SQL cơ bản như \texttt{SELECT}, \texttt{CREATE TABLE} và \texttt{GROUP BY}.
+
+
+\begin{infobox}{Mục tiêu bài học}
+Sau bài học, bạn có thể giải thích vai trò của các thành phần chính trong Databricks; đọc cấu trúc catalog, schema và table; phân tích mô hình cấp quyền theo nhóm và xác định danh tính cần kiểm tra khi truy cập dữ liệu.
+\end{infobox}
+
+\textbf{Ví dụ xuyên suốt:} dữ liệu đơn hàng của một cửa hàng trực tuyến. Kỹ sư cần xử lý dữ liệu gốc, còn analyst cần đọc doanh thu tổng hợp.
+
+
+\textbf{Phần thực hành:} Hands-on: tổ chức dữ liệu và kiểm tra quyền.
+
+
+\textbf{Câu hỏi củng cố:} Quiz ôn tập.
+
+
+\begin{notebox}
+\textbf{Phạm vi:} bài đọc giới thiệu các thành phần Databricks và mô hình governance của Unity Catalog. Tài liệu chính thức được đối chiếu ngày 27/10/2026; các liên kết tham khảo dùng phiên bản tài liệu Databricks trên AWS.
+\end{notebox}
+
+\clearpage
+\tableofcontents
+\clearpage
+
+\FloatBarrier
+\Needspace{5\baselineskip}
+\section{Bắt đầu từ một bài toán dữ liệu}
+
+Giả sử một cửa hàng trực tuyến nhận hàng nghìn đơn hàng mỗi ngày. Dữ liệu được sử dụng bởi nhiều nhóm: kỹ sư nạp và làm sạch đơn hàng, analyst tính doanh thu, còn người quản lý theo dõi báo cáo kinh doanh.
+
+
+Ban đầu, mỗi nhóm có thể tải một file về máy và xử lý riêng. Cách làm này dễ bắt đầu, nhưng khi số người và số tác vụ tăng lên, nhóm sẽ phải trả lời những câu hỏi khó hơn: bản dữ liệu nào là bản đang được sử dụng, ai được sửa bảng nguồn, và tại sao hai báo cáo doanh thu lại cho kết quả khác nhau?
+
+
+Một môi trường làm việc chung giúp các thành viên chia sẻ mã xử lý và khai thác dữ liệu nhất quán hơn. Tuy vậy, việc đưa mọi người vào cùng môi trường chưa giải quyết được toàn bộ vấn đề. Nhóm còn cần quy định trách nhiệm, tổ chức tài sản dữ liệu và kiểm soát những hành động được phép thực hiện.
+
+
+Đó là hai nội dung chính của bài học này: sử dụng Databricks làm môi trường xử lý dữ liệu và thiết lập các nguyên tắc governance cơ bản ngay trong môi trường đó.
+
+
+\FloatBarrier
+\Needspace{5\baselineskip}
+\section{Các khái niệm nền tảng}
+
+\FloatBarrier
+\Needspace{5\baselineskip}
+\subsection{Databricks là gì?}
+
+\textbf{Databricks} là nền tảng phục vụ kỹ thuật dữ liệu, phân tích dữ liệu và AI. Người dùng có thể viết SQL hoặc mã lập trình, chạy các tác vụ xử lý, tổ chức dữ liệu và chia sẻ kết quả trong cùng một hệ sinh thái. Nền tảng tích hợp với tài nguyên lưu trữ và hạ tầng đám mây để thực hiện các công việc này. Xem \href{https://docs.databricks.com/aws/en/introduction/}{tổng quan Databricks}.
+
+
+Trong tình huống đơn hàng, một luồng làm việc có thể gồm: đọc dữ liệu đầu vào, loại bỏ đơn không hợp lệ, lưu bảng dữ liệu sạch, tính doanh thu theo ngày và chạy lại các bước đó theo lịch.
+
+
+Để theo bài học, bạn chưa cần hiểu toàn bộ công nghệ bên trong Databricks. Trước hết, hãy nắm được ba việc: viết công việc cần thực hiện ở đâu, tài nguyên nào thực thi công việc và dữ liệu được tổ chức, quản lý như thế nào.
+
+
+\FloatBarrier
+\Needspace{5\baselineskip}
+\subsection{Data lake, data warehouse và lakehouse}
+
+Ba thuật ngữ này giúp đặt Databricks vào bối cảnh của một hệ thống dữ liệu:
+
+
+\begin{table}[H]
+\small
+\renewcommand{\arraystretch}{1.25}
+\begin{tabularx}{\linewidth}{@{}p{0.20\linewidth}YY@{}}
+\toprule
+\rowcolor{rowLavender}
+\textbf{Khái niệm} & \textbf{Cách hiểu ở mức nhập môn} & \textbf{Ví dụ trong bài toán đơn hàng} \\
+\midrule
+\textbf{Data lake} & Lưu trữ dữ liệu ở nhiều dạng, gồm cả dữ liệu chưa được chuẩn hóa cho phân tích. & File đơn hàng gốc, log hoặc dữ liệu JSON nhận từ hệ thống bán hàng. \\
+\textbf{Data warehouse} & Tổ chức dữ liệu phục vụ truy vấn phân tích và báo cáo theo mô hình được quản lý. & Các bảng phục vụ phân tích doanh thu và hiệu quả kinh doanh. \\
+\textbf{Lakehouse} & Kết hợp khả năng lưu trữ linh hoạt của data lake với các khả năng quản lý bảng và phân tích của data warehouse. & Một nền tảng lưu dữ liệu gốc, xử lý thành bảng và phục vụ phân tích có quản trị. \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+
+Đây là cách phân biệt theo vai trò để bắt đầu học; phạm vi tính năng của một sản phẩm cụ thể có thể rộng hơn các mô tả trong bảng. Databricks sử dụng kiến trúc lakehouse, trong đó Delta Lake và Unity Catalog là những thành phần liên quan trực tiếp đến nội dung bài này. Xem \href{https://docs.databricks.com/aws/en/lakehouse/}{kiến trúc lakehouse}.
+
+
+\begin{figure}[!htbp]
+\centering
+\includegraphics[width=\linewidth,height=0.57\textheight,keepaspectratio]{images/lakehouse-architecture.png}
+\begin{figurecardcaptionaivn}
+\capfig{Kiến trúc lakehouse trong tài liệu Databricks: dữ liệu từ nhiều nguồn được biến đổi qua các lớp bảng và phục vụ nhiều nhu cầu sử dụng. Unity Catalog quản trị các tài sản liên quan. Nguồn: \href{https://docs.databricks.com/aws/en/lakehouse/}{What is a data lakehouse?}.}
+\end{figurecardcaptionaivn}
+\end{figure}
+
+
+Đọc hình từ trái sang phải: dữ liệu đầu vào đi vào vùng lưu trữ, được biến đổi qua các nhóm bảng, rồi phục vụ phân tích hoặc ứng dụng. Phần phía trên nhấn mạnh vai trò quản trị xuyên suốt. Ví dụ xuyên suốt bài học thu nhỏ ý tưởng này thành ba bảng đơn hàng và doanh thu.
+
+
+\FloatBarrier
+\Needspace{5\baselineskip}
+\subsection{Data governance là gì?}
+
+\textbf{Data governance}, hay quản trị dữ liệu, là cách một tổ chức xác định trách nhiệm, quy tắc và cơ chế sử dụng dữ liệu. Đối với bài toán của chúng ta, governance được cụ thể hóa qua bốn câu hỏi:
+
+
+\begin{enumerate}
+\item Dữ liệu nào đang tồn tại và được tổ chức ở đâu?
+\item Ai chịu trách nhiệm đối với dữ liệu đó?
+\item Ai được đọc, thay đổi hoặc tạo tài sản dữ liệu?
+\item Có thể lần theo nguồn gốc và xem xét các hoạt động sử dụng dữ liệu hay không?
+\end{enumerate}
+
+Ví dụ, analyst cần bảng doanh thu theo ngày nhưng không có nhiệm vụ sửa đơn hàng gốc. Governance giúp thể hiện yêu cầu nghiệp vụ này thành một cấu trúc dữ liệu và một tập quyền có thể kiểm tra.
+
+
+Phân quyền là một phần của governance. Việc mô tả dữ liệu, xác định người sở hữu và theo dõi nguồn gốc cũng quan trọng: một bảng có quyền truy cập đúng nhưng không ai hiểu ý nghĩa các cột vẫn khó sử dụng hiệu quả.
+
+
+\FloatBarrier
+\Needspace{5\baselineskip}
+\subsection{Unity Catalog là gì?}
+
+\textbf{Unity Catalog} là lớp quản trị dữ liệu và tài sản AI của Databricks. Nó cung cấp mô hình tổ chức đối tượng, kiểm soát truy cập và các khả năng liên quan đến khám phá dữ liệu, lineage, audit. Trong bài này, ta đi sâu vào cách đặt tài sản trong namespace và cấp quyền theo nhóm. Xem \href{https://docs.databricks.com/aws/en/data-governance/unity-catalog/}{giới thiệu Unity Catalog}.
+
+
+Nếu Databricks là môi trường để nhóm thực hiện công việc dữ liệu, thì Unity Catalog cung cấp các cơ chế giúp quản lý những tài sản mà công việc đó sử dụng.
+
+
+\FloatBarrier
+\Needspace{5\baselineskip}
+\section{Bức tranh tổng thể: các thành phần liên hệ thế nào?}
+
+Hãy theo dõi một thao tác đơn giản: một kỹ sư mở notebook, viết câu \texttt{SELECT} và chạy truy vấn. Notebook nằm trong workspace; câu lệnh được thực thi trên compute; bảng được tham chiếu bằng tên trong catalog; quyền truy cập được kiểm tra theo danh tính đang thực thi.
+
+
+Khi thao tác cần chạy lặp lại, kỹ sư có thể đưa notebook vào một job. Job quyết định tác vụ nào chạy, vào lúc nào và theo quan hệ phụ thuộc nào.
+
+
+\begin{figure}[!htbp]
+\centering
+\begin{tikzpicture}[node distance=10mm]
+\node[aivnnode,text width=4.4cm] (w) at (0,0) {\textbf{Workspace}\\Notebook, file, truy vấn};
+\node[aivnnode,text width=4.4cm] (j) at (6.4,0) {\textbf{Jobs}\\Task và lịch chạy};
+\node[aivnnode,text width=4.4cm] (c) at (3.2,-1.7) {\textbf{Compute}\\Thực thi câu lệnh};
+\node[aivnnode,text width=4.4cm] (d) at (3.2,-3.5) {\textbf{Bảng dữ liệu}\\Đọc và ghi};
+\node[aivnnode,text width=3.7cm] (u) at (9.2,-3.5) {\textbf{Unity Catalog}\\Namespace, metadata, quyền};
+\draw[aivnarrow] (w)--(c); \draw[aivnarrow] (j)--(c);
+\draw[aivnarrow] (c)--(d);
+\draw[aivnarrow,dashed] (u)--node[above,font=\scriptsize,align=center] {Quản trị\\truy cập} (d);
+\end{tikzpicture}
+\begin{figurecardcaptionaivn}
+\capfig{Quan hệ chức năng giữa các thành phần. Sơ đồ không mô tả vị trí triển khai vật lý hoặc đường truyền mạng.}
+\end{figurecardcaptionaivn}
+\end{figure}
+
+
+\begin{table}[H]
+\small
+\renewcommand{\arraystretch}{1.25}
+\begin{tabularx}{\linewidth}{@{}p{0.20\linewidth}YY@{}}
+\toprule
+\rowcolor{rowLavender}
+\textbf{Thành phần} & \textbf{Vai trò chính} & \textbf{Ví dụ} \\
+\midrule
+Workspace & Tổ chức công việc và cộng tác. & Thư mục chứa notebook xử lý đơn hàng. \\
+Notebook & Chứa mã, phần diễn giải và kết quả. & Các ô SQL tạo bảng doanh thu. \\
+Compute & Cung cấp tài nguyên thực thi. & SQL warehouse hoặc compute dùng cho notebook. \\
+Job & Điều phối tác vụ và các lần chạy. & Chạy notebook kiểm tra dữ liệu hằng ngày. \\
+Catalog & Nhóm tài sản trong namespace dữ liệu. & Catalog \texttt{lab\_\allowbreak{}governance}. \\
+Unity Catalog & Quản trị các đối tượng dữ liệu và quyền liên quan. & Quy định analyst được đọc bảng nào. \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+
+Phân biệt những vai trò này giúp giải thích lỗi chính xác hơn. Không tìm thấy notebook là vấn đề khác với không có quyền sử dụng compute; cả hai cũng khác với việc thiếu quyền đọc bảng.
+
+
+\FloatBarrier
+\Needspace{5\baselineskip}
+\section{Workspace, compute và jobs}
+
+\FloatBarrier
+\Needspace{5\baselineskip}
+\subsection{Workspace: nơi tổ chức công việc}
+
+\textbf{Workspace} là môi trường để người dùng truy cập notebook, file, truy vấn và các chức năng của Databricks. Nhóm có thể sắp xếp mã nguồn vào thư mục để dễ tìm kiếm và cộng tác. Xem \href{https://docs.databricks.com/aws/en/workspace/}{Workspace UI}.
+
+
+Ví dụ, nhóm tạo một thư mục:
+
+
+\begin{aivncodebox}[language={}]{Ví dụ tổ chức notebook trong workspace}
+/Shared/order-analytics/
+    01_prepare_orders
+    02_build_daily_sales
+    03_check_results
+\end{aivncodebox}
+
+Ba notebook có thể đảm nhiệm ba bước khác nhau. Cách tổ chức này giúp thành viên hiểu công việc, nhưng bản thân đường dẫn thư mục chưa xác định toàn bộ quyền truy cập vào những bảng mà notebook sử dụng.
+
+
+Một notebook nằm trong \texttt{/\allowbreak{}Shared/\allowbreak{}order-analytics/\allowbreak{}} vẫn cần quyền dữ liệu phù hợp để đọc bảng \texttt{lab\_\allowbreak{}governance.\allowbreak{}bronze.\allowbreak{}orders\_\allowbreak{}raw}.
+
+
+\FloatBarrier
+\Needspace{5\baselineskip}
+\subsection{Compute: nơi câu lệnh được thực thi}
+
+\textbf{Compute} là tài nguyên tính toán dùng để chạy công việc. Khi viết xong SQL trong notebook, bạn cần một loại compute phù hợp để thực thi câu lệnh. Databricks cung cấp các lựa chọn như serverless compute, classic compute và SQL warehouses. \textbf{SQL warehouse} là compute phục vụ truy vấn SQL và phân tích. Xem \href{https://docs.databricks.com/aws/en/compute/}{tài liệu compute}.
+
+
+Ở mức nhập môn, hãy tách hai điều kiện:
+
+
+\begin{itemize}
+\item Bạn có được sử dụng tài nguyên thực thi đó không?
+\item Danh tính thực thi có được thao tác với bảng dữ liệu không?
+\end{itemize}
+
+Một user có thể có quyền đọc bảng nhưng chưa có quyền sử dụng SQL warehouse đang chọn. Ngược lại, user có thể sử dụng warehouse nhưng không được đọc một bảng cụ thể. Cấp thêm quyền bảng không giải quyết được lỗi sử dụng compute.
+
+
+\FloatBarrier
+\Needspace{5\baselineskip}
+\subsection{Job, task, trigger và run}
+
+\textbf{Job} dùng để điều phối công việc. Một job gồm một hoặc nhiều \textbf{task}, mỗi task thực hiện một bước như chạy notebook. Các task có thể có quan hệ phụ thuộc: chỉ bắt đầu bước tính doanh thu sau khi bước làm sạch hoàn thành.
+
+
+\textbf{Trigger} xác định khi nào job được khởi chạy, chẳng hạn theo lịch. \textbf{Run} là một lần thực thi cụ thể của job. Databricks gọi sản phẩm điều phối này là \textbf{Lakeflow Jobs}. Xem \href{https://docs.databricks.com/aws/en/jobs/}{tài liệu Lakeflow Jobs}.
+
+
+\begin{figure}[!htbp]
+\centering
+\begin{tikzpicture}[node distance=6mm]
+\node[aivnnode,text width=2.65cm] (a) {Nạp\\đơn hàng};
+\node[aivnnode,text width=2.65cm,right=of a] (b) {Làm sạch\\dữ liệu};
+\node[aivnnode,text width=2.65cm,right=of b] (c) {Tính\\doanh thu};
+\node[aivnnode,text width=2.65cm,right=of c] (d) {Kiểm tra\\kết quả};
+\draw[aivnarrow] (a)--(b); \draw[aivnarrow] (b)--(c); \draw[aivnarrow] (c)--(d);
+\end{tikzpicture}
+\begin{figurecardcaptionaivn}
+\capfig{Ví dụ các task trong một job xử lý đơn hàng.}
+\end{figurecardcaptionaivn}
+\end{figure}
+
+
+Job mô tả công việc cần chạy; run cho biết điều gì xảy ra trong một lần thực thi. Khi kiểm tra lỗi, cần mở đúng run để xem task thất bại, thông báo lỗi và kết quả đã tạo.
+
+
+\begin{figure}[!htbp]
+\centering
+\includegraphics[width=\linewidth,height=0.57\textheight,keepaspectratio]{images/lakeflow-jobs-example.png}
+\begin{figurecardcaptionaivn}
+\capfig{Ảnh giao diện một job minh họa trong tài liệu chính thức, có các task, nhánh điều kiện và lịch chạy. Đây là ảnh tham khảo của Databricks, chưa phải ảnh thực hiện lab trong bài. Nguồn: \href{https://docs.databricks.com/aws/en/jobs/}{Lakeflow Jobs}.}
+\end{figurecardcaptionaivn}
+\end{figure}
+
+
+Trong ảnh, các ô ở giữa biểu diễn task và quan hệ phụ thuộc; phần \textbf{Schedules \& Triggers} ở bên phải cho biết điều kiện chạy. Ví dụ này có nhánh điều kiện nên phức tạp hơn luồng tuyến tính ở Hình 3, nhưng vẫn dùng cùng những khái niệm job, task và trigger.
+
+
+\FloatBarrier
+\Needspace{5\baselineskip}
+\subsection{Người bấm chạy và danh tính thực thi}
+
+Jobs có các quyền quản lý riêng, đồng thời có cấu hình \textbf{Run as} xác định danh tính thực thi. Với notebook task trong bài học, khi task truy cập bảng, cần xem quyền của danh tính Run as. Người kích hoạt job có thể khác với danh tính này. Xem \href{https://docs.databricks.com/aws/en/jobs/privileges}{quyền và danh tính của Jobs}.
+
+
+Giả sử Lan có quyền bấm chạy job. Job được cấu hình chạy bằng danh tính của một kỹ sư có quyền đọc bảng silver. Job có thể đọc silver thành công, nhưng điều đó chưa chứng minh Lan có quyền chạy câu \texttt{SELECT} trực tiếp trên bảng ấy.
+
+
+Trong môi trường vận hành, nhóm thường sử dụng \textbf{service principal}, tức danh tính dành cho ứng dụng hoặc tự động hóa, để quản lý quyền thực thi độc lập với tài khoản cá nhân. Bạn có thể quan sát nguyên tắc Run as trong tài liệu hands-on đi kèm.
+
+
+\FloatBarrier
+\Needspace{5\baselineskip}
+\section{Tổ chức dữ liệu: metastore, catalog, schema và table}
+
+\FloatBarrier
+\Needspace{5\baselineskip}
+\subsection{Đọc cấu trúc từ trên xuống}
+
+Unity Catalog tổ chức tài sản theo một hệ thống phân cấp. Với bảng dữ liệu, ta quan tâm đến bốn cấp:
+
+
+\begin{table}[H]
+\small
+\renewcommand{\arraystretch}{1.25}
+\begin{tabularx}{\linewidth}{@{}p{0.20\linewidth}YY@{}}
+\toprule
+\rowcolor{rowLavender}
+\textbf{Cấp} & \textbf{Ý nghĩa} & \textbf{Ví dụ} \\
+\midrule
+\textbf{Metastore} & Cấp chứa metadata và các đối tượng Unity Catalog. & Metastore mà workspace đang sử dụng. \\
+\textbf{Catalog} & Nhóm tài sản theo một phạm vi lớn, như môi trường hoặc đơn vị nghiệp vụ. & \texttt{lab\_\allowbreak{}governance}. \\
+\textbf{Schema} & Chia nhỏ tài sản trong một catalog. & \texttt{bronze}, \texttt{silver}, \texttt{gold}. \\
+\textbf{Table} & Chứa dữ liệu có cấu trúc theo dòng và cột. & \texttt{orders\_\allowbreak{}raw}, \texttt{orders\_\allowbreak{}clean}, \texttt{daily\_\allowbreak{}sales}. \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+
+Schema còn có thể chứa các đối tượng khác như view, volume và function. Bài này tập trung vào table để làm rõ mô hình trước. Xem \href{https://docs.databricks.com/aws/en/data-governance/unity-catalog/securable-objects}{hệ thống đối tượng Unity Catalog}.
+
+
+\begin{figure}[!htbp]
+\centering
+\includegraphics[width=\linewidth,height=0.57\textheight,keepaspectratio]{images/unity-catalog-hierarchy.png}
+\begin{figurecardcaptionaivn}
+\capfig{Hệ thống phân cấp đối tượng Unity Catalog trong tài liệu chính thức. Khi mới học, hãy theo nhánh giữa: Metastore \ensuremath{\rightarrow} Catalog \ensuremath{\rightarrow} Schema \ensuremath{\rightarrow} Table. Các nhánh còn lại minh họa những tài sản khác mà Unity Catalog có thể quản trị. Nguồn: \href{https://docs.databricks.com/aws/en/data-governance/unity-catalog/securable-objects}{Unity Catalog securable objects reference}.}
+\end{figurecardcaptionaivn}
+\end{figure}
+
+
+Áp dụng nhánh này vào dữ liệu đơn hàng, ta có cấu trúc nhỏ hơn:
+
+
+\begin{figure}[!htbp]
+\centering
+\begin{tikzpicture}[node distance=8mm]
+\node[aivnnode,text width=4.7cm] (m) {\textbf{Metastore}};
+\node[aivnnode,text width=4.7cm,below=of m] (c) {Catalog: \texttt{lab\_governance}};
+\node[aivnnode,text width=3.5cm,below=10mm of c] (s) {Schema: \texttt{silver}};
+\node[aivnnode,text width=3.5cm,left=5mm of s] (b) {Schema: \texttt{bronze}};
+\node[aivnnode,text width=3.5cm,right=5mm of s] (g) {Schema: \texttt{gold}};
+\node[aivnnode,text width=3.5cm,below=of b] (bt) {\texttt{orders\_raw}\\\footnotesize Table};
+\node[aivnnode,text width=3.5cm,below=of s] (st) {\texttt{orders\_clean}\\\footnotesize Table};
+\node[aivnnode,text width=3.5cm,below=of g] (gt) {\texttt{daily\_sales}\\\footnotesize Table};
+\draw[aivnarrow] (m)--(c); \draw[aivnarrow] (c)--(b); \draw[aivnarrow] (c)--(s); \draw[aivnarrow] (c)--(g);
+\draw[aivnarrow] (b)--(bt); \draw[aivnarrow] (s)--(st); \draw[aivnarrow] (g)--(gt);
+\end{tikzpicture}
+\begin{figurecardcaptionaivn}
+\capfig{Ví dụ cấu trúc dữ liệu đơn hàng theo ba lớp bronze, silver và gold.}
+\end{figurecardcaptionaivn}
+\end{figure}
+
+
+\FloatBarrier
+\Needspace{5\baselineskip}
+\subsection{Namespace ba cấp}
+
+Tên đầy đủ của một bảng có dạng:
+
+
+\begin{aivncodebox}[language={}]{Tên bảng ba cấp}
+catalog.schema.table
+\end{aivncodebox}
+
+Ví dụ:
+
+
+\begin{aivncodebox}[language=SQL]{Ví dụ truy vấn bằng tên bảng đầy đủ}
+SELECT *
+FROM lab_governance.gold.daily_sales;
+\end{aivncodebox}
+
+Ở đây, \texttt{lab\_\allowbreak{}governance} là catalog, \texttt{gold} là schema và \texttt{daily\_\allowbreak{}sales} là table. Viết tên đầy đủ giúp chỉ rõ đối tượng cần truy vấn, đặc biệt khi các catalog hoặc schema khác nhau có bảng trùng tên.
+
+
+\textbf{Schema} trong ngữ cảnh này là một namespace chứa đối tượng. Từ “schema” cũng có thể chỉ cấu trúc cột và kiểu dữ liệu của một bảng. Khi trao đổi, cần xác định đang nói đến schema chứa bảng hay cấu trúc của bảng.
+
+
+\FloatBarrier
+\Needspace{5\baselineskip}
+\subsection{Chọn cách tổ chức phù hợp}
+
+Một nhóm có thể dùng catalog theo môi trường, chẳng hạn \texttt{sales\_\allowbreak{}dev} và \texttt{sales\_\allowbreak{}prod}; một nhóm khác có thể tổ chức theo đơn vị nghiệp vụ. Bên trong catalog, schema tiếp tục chia dữ liệu theo mục đích sử dụng.
+
+
+Ví dụ đơn hàng dùng ba schema \texttt{bronze}, \texttt{silver}, \texttt{gold} để làm rõ quá trình biến đổi:
+
+
+\begin{itemize}
+\item \textbf{Bronze:} giữ dữ liệu đơn hàng ban đầu.
+\item \textbf{Silver:} giữ những đơn hàng đáp ứng quy tắc làm sạch.
+\item \textbf{Gold:} giữ bảng doanh thu tổng hợp để analyst sử dụng.
+\end{itemize}
+
+Đây là một cách tổ chức cho ví dụ, không phải tên bắt buộc của Unity Catalog. Điều cần giải thích được là mỗi cấp dùng để phân chia trách nhiệm, dữ liệu và quyền như thế nào.
+
+
+\FloatBarrier
+\Needspace{5\baselineskip}
+\subsection{Tên bảng và vị trí lưu trữ}
+
+Khi làm việc, bạn sẽ gặp ba loại địa chỉ có vai trò khác nhau:
+
+
+\begin{table}[H]
+\small
+\renewcommand{\arraystretch}{1.25}
+\begin{tabularx}{\linewidth}{@{}p{0.45\linewidth}Y@{}}
+\toprule
+\rowcolor{rowLavender}
+\textbf{Địa chỉ} & \textbf{Chỉ đến điều gì?} \\
+\midrule
+\texttt{/\allowbreak{}Shared/\allowbreak{}order-analytics/\allowbreak{}01\_\allowbreak{}prepare\_\allowbreak{}orders} & Notebook trong workspace. \\
+\texttt{lab\_\allowbreak{}governance.\allowbreak{}bronze.\allowbreak{}orders\_\allowbreak{}raw} & Đối tượng bảng trong namespace dữ liệu. \\
+Một URI của object storage & Vị trí vật lý của các file dữ liệu. \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+
+Catalog và schema mô tả cách tổ chức logic. Vị trí lưu trữ được quản lý bằng cấu hình liên quan; không nên suy ra đường dẫn file vật lý chỉ từ tên notebook hoặc tên schema.
+
+
+\FloatBarrier
+\Needspace{5\baselineskip}
+\subsection{Managed table, external table và Delta Lake}
+
+Với \textbf{managed table}, Unity Catalog quản lý metadata và vòng đời dữ liệu lưu trữ của bảng. Với \textbf{external table}, bảng tham chiếu tới vị trí dữ liệu được quản lý bên ngoài; quản trị qua Unity Catalog vẫn áp dụng khi truy cập bảng qua Databricks. Sự khác biệt này ảnh hưởng đến trách nhiệm quản lý dữ liệu và vòng đời tài sản. Xem \href{https://docs.databricks.com/aws/en/tables/managed}{managed tables} và \href{https://docs.databricks.com/aws/en/data-governance/unity-catalog/}{mô hình đối tượng Unity Catalog}.
+
+
+Ví dụ trong bài sử dụng managed table để tập trung vào namespace và quyền truy cập.
+
+
+Các bảng mẫu dùng \textbf{Delta Lake}. Delta Lake bổ sung transaction log cho các file dữ liệu Parquet để hỗ trợ giao dịch và quản lý bảng. Trong bài, câu lệnh \texttt{USING DELTA} chỉ rõ định dạng bảng; bạn sẽ thao tác qua SQL thay vì chỉnh trực tiếp các file bên dưới. Xem \href{https://docs.databricks.com/aws/en/delta/}{giới thiệu Delta Lake}.
+
+
+\FloatBarrier
+\Needspace{5\baselineskip}
+\section{Unity Catalog hỗ trợ governance như thế nào?}
+
+\FloatBarrier
+\Needspace{5\baselineskip}
+\subsection{Metadata và khám phá dữ liệu}
+
+\textbf{Metadata} là dữ liệu mô tả một tài sản: tên bảng, cấu trúc cột, mô tả và người sở hữu. Người dùng cần thông tin này để biết bảng nào phù hợp với câu hỏi của mình.
+
+
+Ví dụ, chỉ nhìn tên \texttt{daily\_\allowbreak{}sales} chưa đủ để biết doanh thu có bao gồm đơn hủy hay không. Nhóm nên ghi rõ bảng được xây dựng từ những đơn đã thanh toán và có giá trị dương. Việc mô tả quy tắc nghiệp vụ làm cho tài sản dễ hiểu hơn khi được khám phá qua catalog.
+
+
+Unity Catalog cung cấp mô hình metadata và khả năng khám phá các đối tượng được quản trị. Xem \href{https://docs.databricks.com/aws/en/data-governance/unity-catalog/}{tổng quan Unity Catalog}.
+
+
+\FloatBarrier
+\Needspace{5\baselineskip}
+\subsection{Ownership và trách nhiệm}
+
+\textbf{Owner} là principal sở hữu đối tượng và có quyền quản lý tương ứng. Ownership liên quan đến khả năng quản trị đối tượng, bao gồm cấp quyền; nó cần được phân biệt với quyền chỉ đọc hoặc sửa dữ liệu. Xem \href{https://docs.databricks.com/aws/en/data-governance/unity-catalog/manage-privileges/}{quản lý quyền và ownership}.
+
+
+Trong ví dụ đơn hàng, quản trị viên tạo và sở hữu các bảng mẫu. User analyst nhận quyền đọc một bảng, nhưng không trở thành owner của bảng ấy. Cách bố trí này giúp việc kiểm thử phản ánh đúng quyền được cấp cho analyst.
+
+
+\FloatBarrier
+\Needspace{5\baselineskip}
+\subsection{Access control}
+
+\textbf{Access control} xác định principal nào được thực hiện hành động nào trên đối tượng nào. Một quyết định cấp quyền có ba thành phần:
+
+
+\begin{examplebox}{Một quyết định cấp quyền}
+\begin{tabularx}{\linewidth}{@{}YYY@{}}
+\textbf{Ai?} & \textbf{Được làm gì?} & \textbf{Trên tài sản nào?}\\
+\texttt{lab\_analysts} & \texttt{SELECT} & \texttt{gold.daily\_sales}
+\end{tabularx}
+\end{examplebox}
+
+Ngoài grant theo đối tượng, Databricks có các cơ chế như workspace binding, chính sách theo thuộc tính, row filter và column mask. Phạm vi bài này là cấp quyền theo nhóm; những cơ chế chi tiết hơn được dành cho bước học tiếp theo. Xem \href{https://docs.databricks.com/aws/en/data-governance/unity-catalog/access-control/}{các cơ chế kiểm soát truy cập}.
+
+
+\FloatBarrier
+\Needspace{5\baselineskip}
+\subsection{Lineage: kết quả được tạo từ đâu?}
+
+\textbf{Data lineage} mô tả quan hệ nguồn gốc và biến đổi giữa các tài sản dữ liệu. Khi doanh thu bất thường, ta cần lần ngược từ bảng báo cáo về dữ liệu đầu vào thay vì chỉ xem bảng cuối cùng.
+
+
+Trong ví dụ, quan hệ dự kiến là:
+
+
+\begin{center}
+\begin{tikzpicture}[node distance=6mm]
+\node[aivnnode,text width=4.15cm,font=\footnotesize] (b) {\texttt{bronze.orders\_raw}\\Dữ liệu gốc};
+\node[aivnnode,text width=4.15cm,font=\footnotesize,right=of b] (s) {\texttt{silver.orders\_clean}\\Đơn hợp lệ};
+\node[aivnnode,text width=4.15cm,font=\footnotesize,right=of s] (g) {\texttt{gold.daily\_sales}\\Doanh thu theo ngày};
+\draw[aivnarrow] (b)--(s); \draw[aivnarrow] (s)--(g);
+\end{tikzpicture}
+\end{center}
+\begin{infobox}{Hai bước biến đổi}
+\textbf{Lọc:} giữ đơn đã thanh toán và có số tiền dương.\\
+\textbf{Tổng hợp:} tính doanh thu theo ngày.
+\end{infobox}
+
+Unity Catalog có khả năng thu thập lineage cho các thao tác được hỗ trợ. Việc xem lineage phụ thuộc quyền truy cập và điều kiện của môi trường. Tài liệu hands-on đi kèm có bài tập khám phá lineage khi workspace đáp ứng điều kiện. Xem \href{https://docs.databricks.com/aws/en/data-governance/unity-catalog/data-lineage}{tài liệu lineage}.
+
+
+\begin{figure}[!htbp]
+\centering
+\includegraphics[width=\linewidth,height=0.57\textheight,keepaspectratio]{images/unity-catalog-lineage.png}
+\begin{figurecardcaptionaivn}
+\capfig{Ví dụ giao diện lineage trong tài liệu Databricks. Các nút biểu diễn tài sản và các đường nối biểu diễn quan hệ phụ thuộc. Đây là ảnh tham khảo, không phải lineage của các bảng đơn hàng trong lab. Nguồn: \href{https://docs.databricks.com/aws/en/data-governance/unity-catalog/data-lineage}{Lineage in Unity Catalog}.}
+\end{figurecardcaptionaivn}
+\end{figure}
+
+
+\FloatBarrier
+\Needspace{5\baselineskip}
+\subsection{Audit: hoạt động nào đã xảy ra?}
+
+\textbf{Audit log} ghi nhận những hoạt động của hệ thống để phục vụ việc xem xét lại: danh tính liên quan, thời điểm, loại hành động và thông tin kết quả tùy sự kiện. Trong Databricks, dữ liệu audit có thể được khai thác qua system table \texttt{system.\allowbreak{}access.\allowbreak{}audit} khi có quyền và cấu hình phù hợp. Xem \href{https://docs.databricks.com/aws/en/admin/system-tables/audit-logs}{audit log system table}.
+
+
+Lineage và audit trả lời hai nhóm câu hỏi khác nhau. Lineage giúp hiểu một bảng được tạo từ đâu; audit hỗ trợ xem xét những hoạt động đã diễn ra. Trong bài học, chỉ cần phân biệt được hai vai trò này, chưa cần xây dựng hệ thống giám sát audit.
+
+
+\FloatBarrier
+\Needspace{5\baselineskip}
+\section{Mô hình phân quyền cơ bản}
+
+\FloatBarrier
+\Needspace{5\baselineskip}
+\subsection{User, group và service principal}
+
+\textbf{Principal} là danh tính có thể được cấp quyền. Trong phạm vi bài học:
+
+
+\begin{table}[H]
+\small
+\renewcommand{\arraystretch}{1.25}
+\begin{tabularx}{\linewidth}{@{}p{0.24\linewidth}Y@{}}
+\toprule
+\rowcolor{rowLavender}
+\textbf{Principal} & \textbf{Vai trò} \\
+\midrule
+User & Danh tính của một người dùng. \\
+Group & Tập hợp danh tính để quản lý quyền theo nhóm. \\
+Service principal & Danh tính dành cho ứng dụng hoặc tác vụ tự động. \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+
+Ví dụ phân quyền sử dụng hai \textbf{account group}: \texttt{lab\_\allowbreak{}engineers} và \texttt{lab\_\allowbreak{}analysts}. Các thành viên nhận quyền phù hợp qua nhóm, giúp quản lý theo trách nhiệm thay vì lặp lại từng grant cho từng người.
+
+
+Account group có thể được cấp quyền trên dữ liệu Unity Catalog. Workspace-local group là loại nhóm cũ có phạm vi trong workspace và không dùng để cấp quyền trên dữ liệu Unity Catalog. Xem \href{https://docs.databricks.com/aws/en/admin/users-groups/groups}{các loại group trong Databricks}.
+
+
+\FloatBarrier
+\Needspace{5\baselineskip}
+\subsection{Bắt đầu từ nhu cầu công việc}
+
+Trước khi viết \texttt{GRANT}, hãy xác định hành động cần thực hiện. Analyst trong ví dụ cần đọc bảng doanh thu theo ngày. Kỹ sư cần đọc và cập nhật dữ liệu đầu vào, đồng thời tạo bảng thử nghiệm trong silver.
+
+
+Từ yêu cầu này, ta xây dựng ma trận quyền. Việc cấp quyền được xem là hợp lý khi phạm vi đủ cho công việc đã xác định và có thể kiểm tra bằng một tập thao tác cụ thể.
+
+
+\FloatBarrier
+\Needspace{5\baselineskip}
+\subsection{Những quyền cần biết}
+
+\begin{table}[H]
+\small
+\renewcommand{\arraystretch}{1.25}
+\begin{tabularx}{\linewidth}{@{}p{0.23\linewidth}p{0.22\linewidth}Y@{}}
+\toprule
+\rowcolor{rowLavender}
+\textbf{Quyền} & \textbf{Phạm vi trong ví dụ} & \textbf{Mục đích} \\
+\midrule
+\texttt{USE CATALOG} & Catalog & Sử dụng catalog trong quá trình truy cập đối tượng con. \\
+\texttt{USE SCHEMA} & Schema & Sử dụng schema trong quá trình truy cập đối tượng con. \\
+\texttt{SELECT} & Table & Đọc dữ liệu của bảng. \\
+\texttt{MODIFY} & Table & Thực hiện các thao tác thay đổi dữ liệu như INSERT, UPDATE, DELETE. \\
+\texttt{CREATE TABLE} & Schema & Tạo bảng trong schema. \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+
+Để đọc một bảng, người dùng cần quyền sử dụng hai cấp cha và quyền đọc đối tượng: \texttt{USE CATALOG}, \texttt{USE SCHEMA}, \texttt{SELECT}. Các quyền có thể được nhận qua những grant trực tiếp hoặc cơ chế kế thừa tương ứng. Để tạo bảng, cần quyền sử dụng các cấp cha cùng \texttt{CREATE TABLE} trên schema. Xem \href{https://docs.databricks.com/aws/en/data-governance/unity-catalog/access-control/privileges-reference}{tham chiếu quyền Unity Catalog}.
+
+
+Ví dụ, chỉ cấp \texttt{SELECT} trên \texttt{lab\_\allowbreak{}governance.\allowbreak{}gold.\allowbreak{}daily\_\allowbreak{}sales} có thể vẫn chưa đủ nếu người nhận thiếu quyền sử dụng catalog hoặc schema cha.
+
+
+\FloatBarrier
+\Needspace{5\baselineskip}
+\subsection{Quyền trực tiếp và quyền kế thừa}
+
+Một quyền dữ liệu như \texttt{SELECT} có thể được cấp trên một bảng hoặc ở cấp chứa nó. Trong privilege model hiện hành, quyền ở catalog và schema có thể được kế thừa xuống các đối tượng con tương ứng, gồm cả những đối tượng được tạo trong tương lai. Xem \href{https://docs.databricks.com/aws/en/data-governance/unity-catalog/access-control/permissions-concepts}{mô hình quyền và kế thừa}.
+
+
+Vì vậy, hai lựa chọn sau có phạm vi khác nhau:
+
+
+\begin{aivncodebox}[language=SQL]{Hai phạm vi cấp quyền SELECT}
+-- Quyen doc tren mot bang cu the.
+GRANT SELECT ON TABLE lab_governance.gold.daily_sales
+TO `lab_analysts`;
+
+-- Quyen doc rong hon, ap dung o pham vi schema.
+GRANT SELECT ON SCHEMA lab_governance.gold
+TO `lab_analysts`;
+\end{aivncodebox}
+
+Trong ví dụ, ta chọn quyền trên bảng cụ thể. Nếu sau này có thêm bảng trong gold, cần chủ động quyết định analyst có được đọc bảng mới hay không.
+
+
+\FloatBarrier
+\Needspace{5\baselineskip}
+\subsection{GRANT, REVOKE và SHOW GRANTS}
+
+\texttt{GRANT} cấp quyền, \texttt{REVOKE} thu hồi một grant, còn \texttt{SHOW GRANTS} giúp xem thông tin grant trên đối tượng hoặc của principal. Người thực hiện cần có thẩm quyền quản lý quyền tương ứng, chẳng hạn owner hoặc một danh tính được ủy quyền phù hợp. Xem \href{https://docs.databricks.com/aws/en/data-governance/unity-catalog/manage-privileges/}{quản lý privileges}.
+
+
+Thu hồi một grant không bảo đảm người dùng mất mọi đường truy cập. Nếu user còn nhận cùng quyền từ nhóm khác, cấp cha hoặc ownership, truy vấn có thể vẫn thành công. Khi kiểm tra, hãy tìm nguồn của quyền thay vì chỉ nhìn câu \texttt{REVOKE} vừa chạy.
+
+
+\FloatBarrier
+\Needspace{5\baselineskip}
+\section{Những điểm cần nhớ}
+
+Databricks cung cấp môi trường để xử lý và khai thác dữ liệu. Workspace giúp tổ chức công việc; compute thực thi; jobs điều phối các bước và các lần chạy. Unity Catalog cung cấp namespace và những cơ chế quản trị tài sản dữ liệu.
+
+
+Khi bắt đầu thiết kế governance, hãy đi từ nhu cầu công việc đến cấu trúc dữ liệu, sau đó đến ma trận quyền và câu lệnh cấp quyền. Kiểm tra bằng đúng danh tính, trên cả thao tác được phép và bị từ chối, giúp chuyển một cấu hình quyền thành kết quả có thể đánh giá.
+
+
+\textbf{Tiếp tục thực hành:} Hands-on: tổ chức dữ liệu và kiểm tra quyền.
+
+
+\textbf{Tự kiểm tra kiến thức:} Quiz ôn tập.
+
+
+\FloatBarrier
+\clearpage
+\section*{Tài liệu tham khảo}
+\addcontentsline{toc}{section}{Tài liệu tham khảo}
+
+\begingroup\small
+\begin{itemize}
+\item \href{https://docs.databricks.com/aws/en/introduction/}{What is Databricks?}
+\item \href{https://docs.databricks.com/aws/en/lakehouse/}{What is a data lakehouse?}
+\item \href{https://docs.databricks.com/aws/en/workspace/}{Workspace UI}
+\item \href{https://docs.databricks.com/aws/en/compute/}{Compute}
+\item \href{https://docs.databricks.com/aws/en/jobs/}{Lakeflow Jobs}
+\item \href{https://docs.databricks.com/aws/en/jobs/privileges}{Manage identities, permissions, and privileges for Lakeflow Jobs}
+\item \href{https://docs.databricks.com/aws/en/data-governance/unity-catalog/}{What is Unity Catalog?}
+\item \href{https://docs.databricks.com/aws/en/data-governance/unity-catalog/securable-objects}{Unity Catalog securable objects reference}
+\item \href{https://docs.databricks.com/aws/en/tables/managed}{Unity Catalog managed tables}
+\item \href{https://docs.databricks.com/aws/en/delta/}{What is Delta Lake in Databricks?}
+\item \href{https://docs.databricks.com/aws/en/data-governance/unity-catalog/access-control/}{Access control in Unity Catalog}
+\item \href{https://docs.databricks.com/aws/en/data-governance/unity-catalog/access-control/privileges-reference}{Unity Catalog privileges reference}
+\item \href{https://docs.databricks.com/aws/en/data-governance/unity-catalog/access-control/permissions-concepts}{Unity Catalog permissions model concepts}
+\item \href{https://docs.databricks.com/aws/en/data-governance/unity-catalog/manage-privileges/}{Manage privileges in Unity Catalog}
+\item \href{https://docs.databricks.com/aws/en/admin/users-groups/groups}{Groups}
+\item \href{https://docs.databricks.com/aws/en/data-governance/unity-catalog/data-lineage}{Lineage in Unity Catalog}
+\item \href{https://docs.databricks.com/aws/en/admin/system-tables/audit-logs}{Audit log system table reference}
+\end{itemize}
+\endgroup
