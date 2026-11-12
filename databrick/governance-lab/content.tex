@@ -1,0 +1,654 @@
+% Generated from databricks-governance-hands-on.md by build-from-markdown.mjs. Edit the Markdown, not this file.
+
+\begin{center}\large \emph{Tổ chức catalog, schema, table và kiểm tra quyền truy cập bằng từng danh tính}\end{center}
+
+\textbf{Bài đọc nền tảng:} Databricks \& Governance Basics.
+
+
+\begin{infobox}{Mục tiêu buổi lab}
+Sau buổi lab, học viên tạo được cấu trúc catalog, schema và bảng đơn hàng, chuyển một ma trận quyền thành các câu \texttt{GRANT} theo nhóm, rồi kiểm thử bằng đúng danh tính cả thao tác được phép lẫn bị từ chối. Học viên quan sát được việc thu hồi quyền và danh tính Run as của một job.
+\end{infobox}
+
+\textbf{Kiến thức cần có:} SQL cơ bản và các khái niệm workspace, compute, jobs, namespace, principal, grant trong bài đọc nền tảng.
+
+
+\begin{notebox}
+\textbf{Trạng thái:} lab chưa được chạy trên một workspace cụ thể. Các bảng “Kết quả kỳ vọng” được tính trực tiếp từ năm đơn hàng mẫu của lab, không phải ảnh chụp lượt chạy. Hành vi phân quyền (bị từ chối hay không, nội dung thông báo lỗi) chỉ được xác nhận khi chạy bằng hai user thật; ghi lại nguyên văn kết quả bạn nhận được.
+\end{notebox}
+
+\tableofcontents
+\clearpage
+
+\Needspace{10\baselineskip}
+\section{Thiết kế buổi lab}
+
+\Needspace{7\baselineskip}
+\subsection{Thời lượng và liên hệ với bài lý thuyết}
+
+Buổi lab dài \textbf{90 phút}. Các bước 1--3 do quản trị viên lab chuẩn bị; trong lớp, giảng viên có thể làm trước hoặc trình diễn để dành thời gian cho phần kiểm thử.
+
+
+\begingroup\small
+\renewcommand{\arraystretch}{1.2}
+\begin{longtable}{@{}p{0.07\linewidth}p{0.48\linewidth}p{0.15\linewidth}p{0.2\linewidth}@{}}
+\toprule
+\rowcolor{rowLavender}
+\textbf{Phần} & \textbf{Nội dung} & \textbf{Thời gian} & \textbf{Mục lý thuyết} \\
+\midrule
+\endfirsthead
+\toprule
+\rowcolor{rowLavender}
+\textbf{Phần} & \textbf{Nội dung} & \textbf{Thời gian} & \textbf{Mục lý thuyết} \\
+\midrule
+\endhead
+\bottomrule
+\endfoot
+2 & Kiểm tra môi trường, danh tính, thiết kế quyền & 10 phút & 4.2, 7.1, 7.2 \\
+3 & Tạo catalog, schema và ba bảng đơn hàng & 15 phút & 5.1--5.5 \\
+4 & Cấp quyền theo nhóm, xem grant & 10 phút & 7.3--7.5 \\
+5 & Kiểm thử bằng user kỹ sư & 15 phút & 7.3, 7.4 \\
+6 & Kiểm thử bằng user analyst & 15 phút & 6.3, 7.3 \\
+7 & Thu hồi quyền, thử lại, khôi phục & 5 phút & 7.5 \\
+8 & Job và danh tính Run as & 15 phút & 4.3, 4.4 \\
+9 & Ghi nhận kết quả, dọn dẹp & 5 phút & Tổng hợp \\
+\end{longtable}
+\endgroup
+
+\Needspace{7\baselineskip}
+\subsection{Vai trò và môi trường}
+
+Lab cần \textbf{ba danh tính khác nhau}. Không dùng tài khoản quản trị để đại diện kết quả kiểm thử của hai vai trò.
+
+
+\Needspace{12\baselineskip}
+\begingroup\small
+\renewcommand{\arraystretch}{1.2}
+\begin{longtable}{@{}p{0.2\linewidth}p{0.3\linewidth}p{0.42\linewidth}@{}}
+\toprule
+\rowcolor{rowLavender}
+\textbf{Danh tính} & \textbf{Thuộc nhóm} & \textbf{Làm gì trong lab} \\
+\midrule
+\endfirsthead
+\toprule
+\rowcolor{rowLavender}
+\textbf{Danh tính} & \textbf{Thuộc nhóm} & \textbf{Làm gì trong lab} \\
+\midrule
+\endhead
+\bottomrule
+\endfoot
+Quản trị viên lab & Có quyền tạo catalog và quản lý quyền & Tạo dữ liệu, cấp và thu hồi quyền, cấu hình job \\
+User kỹ sư & \texttt{lab\_\allowbreak{}engineers} & Kiểm thử phần 5, là danh tính Run as ở phần 8 \\
+User analyst & Chỉ \texttt{lab\_\allowbreak{}analysts} & Kiểm thử phần 6 và 7 \\
+\end{longtable}
+\endgroup
+
+Hai user thử nghiệm không phải admin, không sở hữu các bảng mẫu và không nhận quyền rộng hơn thiết kế từ nhóm khác. Workspace cần:
+
+
+\begin{itemize}
+\item Unity Catalog được bật và truy cập được metastore.
+\item Một SQL warehouse hoặc compute tương thích Unity Catalog; cả ba danh tính đều được dùng compute này.
+\item Managed storage mặc định cho catalog mới, hoặc một managed location hợp lệ. Xem \href{https://docs.databricks.com/aws/en/catalogs/create-catalog}{điều kiện tạo catalog}.
+\item Hai \textbf{account group} \texttt{lab\_\allowbreak{}engineers}, \texttt{lab\_\allowbreak{}analysts}. Workspace-local group không dùng để cấp quyền trên dữ liệu Unity Catalog. Xem \href{https://docs.databricks.com/aws/en/admin/users-groups/manage-groups}{Manage groups}.
+\end{itemize}
+
+\begin{notebox}
+\textbf{Databricks Free Edition:} theo \href{https://docs.databricks.com/aws/en/getting-started/free-edition-limitations}{trang giới hạn của Free Edition} (đối chiếu 11/11/2026), mỗi tài khoản có một workspace và một metastore, chỉ có serverless compute, một SQL warehouse cỡ 2X-Small, không có account console và không hỗ trợ SCIM. Trang này không nói rõ có mời thêm user, tạo account group hay chạy \texttt{CREATE CATALOG} được hay không. Vì vậy cần thử trước ba việc đó trên Free Edition; nếu không được, dùng workspace của tổ chức hoặc nhà trường. Nếu chỉ có một tài khoản quản trị, vẫn làm được phần 3, 4 và 8, nhưng chưa xác nhận được hành vi phân quyền của hai vai trò.
+\end{notebox}
+
+\Needspace{7\baselineskip}
+\subsection{Sản phẩm cần nộp}
+
+Mỗi nhóm nộp một báo cáo ngắn gồm các bằng chứng \textbf{E1--E8} (ảnh chụp kết quả hoặc thông báo lỗi, kèm danh tính đang chạy) và câu trả lời cho các câu hỏi \textbf{Q1--Q6} ở cuối từng phần.
+
+
+\begingroup\small
+\renewcommand{\arraystretch}{1.2}
+\begin{longtable}{@{}p{0.08\linewidth}p{0.76\linewidth}p{0.08\linewidth}@{}}
+\toprule
+\rowcolor{rowLavender}
+\textbf{Mã} & \textbf{Bằng chứng} & \textbf{Phần} \\
+\midrule
+\endfirsthead
+\toprule
+\rowcolor{rowLavender}
+\textbf{Mã} & \textbf{Bằng chứng} & \textbf{Phần} \\
+\midrule
+\endhead
+\bottomrule
+\endfoot
+E1 & Ba schema \texttt{bronze}, \texttt{silver}, \texttt{gold} trong Catalog Explorer & 3 \\
+E2 & Bảng \texttt{gold.\allowbreak{}daily\_\allowbreak{}sales} với hai dòng, tổng doanh thu 400.00 & 3 \\
+E3 & Kết quả \texttt{SHOW GRANTS} trên catalog, schema gold và bảng gold & 4 \\
+E4 & User kỹ sư: \texttt{current\_\allowbreak{}user()}, số dòng 5 và 3, bảng thử tạo được & 5 \\
+E5 & User kỹ sư bị từ chối khi đọc gold & 5 \\
+E6 & User analyst đọc được gold và bị từ chối ở bốn thao tác còn lại & 6 \\
+E7 & User analyst bị từ chối sau \texttt{REVOKE} & 7 \\
+E8 & Run của job: \texttt{run\_\allowbreak{}identity}, \texttt{clean\_\allowbreak{}rows}, \texttt{total\_\allowbreak{}amount} & 8 \\
+\end{longtable}
+\endgroup
+
+\Needspace{10\baselineskip}
+\section{Kiểm tra môi trường và thiết kế quyền}
+
+\Needspace{7\baselineskip}
+\subsection{Kiểm tra danh tính và compute}
+
+Mỗi người mở SQL editor, chọn compute của lab và chạy:
+
+
+\begin{aivncodebox}[language={}]{SQL}
+SELECT current_user() AS executing_user;
+\end{aivncodebox}
+
+Ghi lại email của ba danh tính. Nếu không chọn được compute hoặc câu lệnh báo lỗi về compute, xử lý trước khi sang phần 3: thiếu quyền dùng compute là vấn đề khác với thiếu quyền đọc bảng.
+
+
+\Needspace{7\baselineskip}
+\subsection{Thiết kế cấu trúc và quyền trước khi chạy}
+
+Các bảng của lab:
+
+
+\Needspace{12\baselineskip}
+\begingroup\small
+\renewcommand{\arraystretch}{1.2}
+\begin{longtable}{@{}p{0.4\linewidth}p{0.56\linewidth}@{}}
+\toprule
+\rowcolor{rowLavender}
+\textbf{Bảng} & \textbf{Nội dung} \\
+\midrule
+\endfirsthead
+\toprule
+\rowcolor{rowLavender}
+\textbf{Bảng} & \textbf{Nội dung} \\
+\midrule
+\endhead
+\bottomrule
+\endfoot
+\texttt{lab\_\allowbreak{}governance.\allowbreak{}bronze.\allowbreak{}orders\_\allowbreak{}raw} & Năm đơn hàng ban đầu \\
+\texttt{lab\_\allowbreak{}governance.\allowbreak{}silver.\allowbreak{}orders\_\allowbreak{}clean} & Đơn đã thanh toán và có số tiền dương \\
+\texttt{lab\_\allowbreak{}governance.\allowbreak{}gold.\allowbreak{}daily\_\allowbreak{}sales} & Số đơn hợp lệ và doanh thu theo ngày \\
+\end{longtable}
+\endgroup
+
+Ma trận quyền:
+
+
+\begingroup\small
+\renewcommand{\arraystretch}{1.2}
+\begin{longtable}{@{}p{0.56\linewidth}p{0.17\linewidth}p{0.17\linewidth}@{}}
+\toprule
+\rowcolor{rowLavender}
+\textbf{Thao tác} & \textbf{Kỹ sư} & \textbf{Analyst} \\
+\midrule
+\endfirsthead
+\toprule
+\rowcolor{rowLavender}
+\textbf{Thao tác} & \textbf{Kỹ sư} & \textbf{Analyst} \\
+\midrule
+\endhead
+\bottomrule
+\endfoot
+Đọc bảng bronze mẫu & Cho phép & Từ chối \\
+Thay đổi dữ liệu bảng bronze mẫu & Cho phép & Từ chối \\
+Đọc và thay đổi dữ liệu bảng silver mẫu & Cho phép & Từ chối \\
+Tạo bảng trong silver & Cho phép & Từ chối \\
+Đọc bảng gold mẫu & Từ chối & Cho phép \\
+Thay đổi dữ liệu bảng gold mẫu & Từ chối & Từ chối \\
+Tạo bảng trong gold & Từ chối & Từ chối \\
+\end{longtable}
+\endgroup
+
+Kỹ sư không có quyền trên gold là lựa chọn của lab để quan sát ranh giới quyền; một pipeline thực tế có thể cần tập quyền khác.
+
+
+\Needspace{10\baselineskip}
+\section{Tạo catalog, schema và dữ liệu}
+
+\Needspace{7\baselineskip}
+\subsection{Tạo catalog và schema}
+
+\Needspace{6\baselineskip}
+\textbf{Danh tính thực hiện: quản trị viên lab.}\par\nopagebreak
+
+\begin{aivncodebox}[language={}]{SQL}
+CREATE CATALOG lab_governance;
+
+CREATE SCHEMA lab_governance.bronze;
+CREATE SCHEMA lab_governance.silver;
+CREATE SCHEMA lab_governance.gold;
+\end{aivncodebox}
+
+Dùng một catalog lab riêng. Nếu tên \texttt{lab\_\allowbreak{}governance} đã tồn tại, chọn tên khác rồi thay nhất quán trong mọi câu lệnh. Các lệnh cố ý không dùng \texttt{IF NOT EXISTS} để tránh tiếp tục trên tài sản và grant của lần thực hành cũ. Nếu \texttt{CREATE CATALOG} báo thiếu managed location, quản trị viên cần tạo catalog với một managed location hợp lệ.
+
+
+Mở Catalog Explorer, tìm \texttt{lab\_\allowbreak{}governance} và kiểm tra ba schema vừa tạo. Catalog có thể chứa thêm schema do hệ thống tạo sẵn.
+
+
+\begin{evidencebox}
+\textbf{E1:} chụp ba schema trong Catalog Explorer.
+\end{evidencebox}
+
+\Needspace{7\baselineskip}
+\subsection{Tạo bảng đơn hàng gốc}
+
+\begin{aivncodebox}[language={}]{SQL}
+CREATE TABLE lab_governance.bronze.orders_raw (
+    order_id STRING,
+    customer_id STRING,
+    order_date DATE,
+    status STRING,
+    amount DECIMAL(12,2)
+) USING DELTA;
+
+INSERT INTO lab_governance.bronze.orders_raw VALUES
+    ('o1001', 'c01', DATE '2026-10-26', 'paid', 120.00),
+    ('o1002', 'c02', DATE '2026-10-26', 'paid', 80.00),
+    ('o1003', 'c01', DATE '2026-10-26', 'cancelled', 50.00),
+    ('o1004', 'c03', DATE '2026-10-27', 'paid', -20.00),
+    ('o1005', 'c02', DATE '2026-10-27', 'paid', 200.00);
+
+SELECT * FROM lab_governance.bronze.orders_raw ORDER BY order_id;
+\end{aivncodebox}
+
+Kết quả kỳ vọng:
+
+
+\Needspace{12\baselineskip}
+\begingroup\small
+\renewcommand{\arraystretch}{1.2}
+\begin{longtable}{@{}p{0.16\linewidth}p{0.18\linewidth}p{0.2\linewidth}p{0.18\linewidth}p{0.14\linewidth}@{}}
+\toprule
+\rowcolor{rowLavender}
+\textbf{order\_id} & \textbf{customer\_id} & \textbf{order\_date} & \textbf{status} & \textbf{amount} \\
+\midrule
+\endfirsthead
+\toprule
+\rowcolor{rowLavender}
+\textbf{order\_id} & \textbf{customer\_id} & \textbf{order\_date} & \textbf{status} & \textbf{amount} \\
+\midrule
+\endhead
+\bottomrule
+\endfoot
+o1001 & c01 & 2026-10-26 & paid & 120.00 \\
+o1002 & c02 & 2026-10-26 & paid & 80.00 \\
+o1003 & c01 & 2026-10-26 & cancelled & 50.00 \\
+o1004 & c03 & 2026-10-27 & paid & -20.00 \\
+o1005 & c02 & 2026-10-27 & paid & 200.00 \\
+\end{longtable}
+\endgroup
+
+Đơn \texttt{o1003} đã hủy và \texttt{o1004} có số tiền âm; quy tắc của lab là không tính hai đơn này vào doanh thu.
+
+
+\Needspace{7\baselineskip}
+\subsection{Tạo bảng sạch và bảng tổng hợp}
+
+\begin{aivncodebox}[language={}]{SQL}
+CREATE TABLE lab_governance.silver.orders_clean
+USING DELTA AS
+SELECT order_id, customer_id, order_date, amount
+FROM lab_governance.bronze.orders_raw
+WHERE status = 'paid'
+  AND amount > 0;
+
+CREATE TABLE lab_governance.gold.daily_sales
+USING DELTA AS
+SELECT order_date, COUNT(*) AS order_count, SUM(amount) AS revenue
+FROM lab_governance.silver.orders_clean
+GROUP BY order_date;
+
+SELECT * FROM lab_governance.gold.daily_sales ORDER BY order_date;
+\end{aivncodebox}
+
+\texttt{CREATE TABLE .\allowbreak{}.\allowbreak{}.\allowbreak{} AS SELECT} (CTAS) tạo bảng từ kết quả truy vấn. Silver giữ ba đơn hợp lệ; gold gom các đơn theo ngày. Kết quả kỳ vọng:
+
+
+\Needspace{12\baselineskip}
+\begingroup\small
+\renewcommand{\arraystretch}{1.2}
+\begin{longtable}{@{}p{0.32\linewidth}p{0.3\linewidth}p{0.3\linewidth}@{}}
+\toprule
+\rowcolor{rowLavender}
+\textbf{order\_date} & \textbf{order\_count} & \textbf{revenue} \\
+\midrule
+\endfirsthead
+\toprule
+\rowcolor{rowLavender}
+\textbf{order\_date} & \textbf{order\_count} & \textbf{revenue} \\
+\midrule
+\endhead
+\bottomrule
+\endfoot
+2026-10-26 & 2 & 200.00 \\
+2026-10-27 & 1 & 200.00 \\
+\end{longtable}
+\endgroup
+
+Tổng doanh thu kỳ vọng là \textbf{400.00}. Hai bảng này lưu kết quả tại thời điểm tạo; chúng không tự cập nhật khi bronze thay đổi.
+
+
+\begin{evidencebox}
+\textbf{E2:} chụp kết quả \texttt{daily\_\allowbreak{}sales}.
+\end{evidencebox}
+
+\begin{questionbox}{Câu hỏi Q1.}
+Nếu quản trị viên thêm một đơn \texttt{paid} mới vào bronze sau bước này, \texttt{gold.\allowbreak{}daily\_\allowbreak{}sales} có thay đổi không? Cần làm gì để gold phản ánh đơn mới?
+\end{questionbox}
+
+\Needspace{10\baselineskip}
+\section{Cấp quyền theo nhóm}
+
+\Needspace{7\baselineskip}
+\subsection{Nhóm kỹ sư}
+
+\Needspace{6\baselineskip}
+\textbf{Danh tính thực hiện: quản trị viên lab.}\par\nopagebreak
+
+\begin{aivncodebox}[language={}]{SQL}
+GRANT USE CATALOG ON CATALOG lab_governance TO `lab_engineers`;
+GRANT USE SCHEMA ON SCHEMA lab_governance.bronze TO `lab_engineers`;
+GRANT USE SCHEMA ON SCHEMA lab_governance.silver TO `lab_engineers`;
+GRANT CREATE TABLE ON SCHEMA lab_governance.silver TO `lab_engineers`;
+
+GRANT SELECT, MODIFY ON TABLE lab_governance.bronze.orders_raw TO `lab_engineers`;
+GRANT SELECT, MODIFY ON TABLE lab_governance.silver.orders_clean TO `lab_engineers`;
+\end{aivncodebox}
+
+\Needspace{7\baselineskip}
+\subsection{Nhóm analyst và kiểm tra cấu hình}
+
+\begin{aivncodebox}[language={}]{SQL}
+GRANT USE CATALOG ON CATALOG lab_governance TO `lab_analysts`;
+GRANT USE SCHEMA ON SCHEMA lab_governance.gold TO `lab_analysts`;
+GRANT SELECT ON TABLE lab_governance.gold.daily_sales TO `lab_analysts`;
+
+SHOW GRANTS ON CATALOG lab_governance;
+SHOW GRANTS ON SCHEMA lab_governance.gold;
+SHOW GRANTS ON TABLE lab_governance.gold.daily_sales;
+\end{aivncodebox}
+
+Đối chiếu các grant với ma trận ở 2.2. Xem grant mới là kiểm tra \textbf{cấu hình}; phần 5 và 6 kiểm tra \textbf{hành vi} bằng từng user.
+
+
+\begin{evidencebox}
+\textbf{E3:} chụp ba kết quả \texttt{SHOW GRANTS}.
+\end{evidencebox}
+
+\begin{questionbox}{Câu hỏi Q2.}
+Nếu bỏ câu \texttt{GRANT USE SCHEMA ON SCHEMA lab\_\allowbreak{}governance.\allowbreak{}gold} của analyst, analyst còn đọc được \texttt{daily\_\allowbreak{}sales} không? Vì sao?
+\end{questionbox}
+
+\Needspace{10\baselineskip}
+\section{Kiểm thử bằng user kỹ sư}
+
+\Needspace{6\baselineskip}
+\textbf{Danh tính thực hiện: user thuộc \texttt{lab\_\allowbreak{}engineers}, không phải admin.}\par\nopagebreak
+
+\begin{aivncodebox}[language={}]{SQL}
+SELECT current_user() AS executing_user;
+
+SELECT COUNT(*) AS raw_rows FROM lab_governance.bronze.orders_raw;
+SELECT COUNT(*) AS clean_rows FROM lab_governance.silver.orders_clean;
+\end{aivncodebox}
+
+Kỳ vọng lần lượt là \textbf{5} và \textbf{3}. Kiểm tra quyền sửa bằng một câu UPDATE giữ nguyên giá trị:
+
+
+\begin{aivncodebox}[language={}]{SQL}
+UPDATE lab_governance.silver.orders_clean
+SET amount = amount
+WHERE order_id = 'o1001';
+\end{aivncodebox}
+
+Kiểm tra quyền tạo bảng trong silver:
+
+
+\begin{aivncodebox}[language={}]{SQL}
+CREATE TABLE lab_governance.silver.engineer_probe
+USING DELTA AS
+SELECT * FROM lab_governance.silver.orders_clean LIMIT 1;
+
+SELECT * FROM lab_governance.silver.engineer_probe;
+DROP TABLE lab_governance.silver.engineer_probe;
+\end{aivncodebox}
+
+Kỳ vọng tạo, đọc và xóa được bảng thử. Cuối cùng, chạy riêng câu sau để kiểm tra ranh giới với gold:
+
+
+\begin{aivncodebox}[language={}]{SQL}
+SELECT * FROM lab_governance.gold.daily_sales;
+\end{aivncodebox}
+
+Theo ma trận, câu lệnh này phải bị từ chối. Nếu thành công, kiểm tra các quyền bổ sung mà user nhận được trước khi đi tiếp.
+
+
+\begin{evidencebox}
+\textbf{E4, E5:} chụp \texttt{current\_\allowbreak{}user()}, hai số đếm, bảng thử, và thông báo lỗi khi đọc gold.
+\end{evidencebox}
+
+\begin{questionbox}{Câu hỏi Q3.}
+User kỹ sư xóa được \texttt{engineer\_\allowbreak{}probe}. Điều đó có chứng minh user xóa được \texttt{orders\_\allowbreak{}clean} không? Vì sao?
+\end{questionbox}
+
+\Needspace{10\baselineskip}
+\section{Kiểm thử bằng user analyst}
+
+\Needspace{6\baselineskip}
+\textbf{Danh tính thực hiện: user thuộc \texttt{lab\_\allowbreak{}analysts}, không phải admin, không thuộc \texttt{lab\_\allowbreak{}engineers}.}\par\nopagebreak
+
+\begin{aivncodebox}[language={}]{SQL}
+SELECT current_user() AS executing_user;
+SELECT * FROM lab_governance.gold.daily_sales ORDER BY order_date;
+\end{aivncodebox}
+
+Kỳ vọng nhận hai dòng doanh thu như ở 3.3. Sau đó chạy \textbf{từng câu riêng} và ghi nhận kết quả của mỗi câu:
+
+
+\begin{aivncodebox}[language={}]{SQL}
+SELECT * FROM lab_governance.bronze.orders_raw;
+\end{aivncodebox}
+
+\begin{aivncodebox}[language={}]{SQL}
+SELECT * FROM lab_governance.silver.orders_clean;
+\end{aivncodebox}
+
+\begin{aivncodebox}[language={}]{SQL}
+DELETE FROM lab_governance.gold.daily_sales
+WHERE order_date = DATE '1900-01-01';
+\end{aivncodebox}
+
+\begin{aivncodebox}[language={}]{SQL}
+CREATE TABLE lab_governance.gold.analyst_probe (id INT);
+\end{aivncodebox}
+
+Kỳ vọng cả bốn câu bị từ chối vì thiếu quyền; nội dung thông báo có thể khác nhau tùy bước kiểm tra quyền. Nếu câu CREATE thành công ngoài dự kiến, ghi lại hiện tượng và nhờ quản trị viên xóa bảng thử sau khi tìm ra nguyên nhân.
+
+
+\begin{evidencebox}
+\textbf{E6:} chụp kết quả đọc gold và bốn thông báo từ chối.
+\end{evidencebox}
+
+\begin{questionbox}{Câu hỏi Q4.}
+Vì sao câu DELETE dùng ngày \texttt{1900-\allowbreak{}01-\allowbreak{}01}, một ngày không có trong dữ liệu mẫu?
+\end{questionbox}
+
+\Needspace{10\baselineskip}
+\section{Thu hồi quyền}
+
+\textbf{Quản trị viên lab} thu hồi quyền đọc của nhóm analyst:
+
+
+\begin{aivncodebox}[language={}]{SQL}
+REVOKE SELECT ON TABLE lab_governance.gold.daily_sales FROM `lab_analysts`;
+\end{aivncodebox}
+
+\textbf{User analyst} chạy lại truy vấn:
+
+
+\begin{aivncodebox}[language={}]{SQL}
+SELECT * FROM lab_governance.gold.daily_sales;
+\end{aivncodebox}
+
+Kỳ vọng truy vấn bị từ chối nếu không còn nguồn cấp quyền khác. Ghi lại kết quả, sau đó \textbf{quản trị viên} khôi phục quyền:
+
+
+\begin{aivncodebox}[language={}]{SQL}
+GRANT SELECT ON TABLE lab_governance.gold.daily_sales TO `lab_analysts`;
+\end{aivncodebox}
+
+Không chạy REVOKE và GRANT liên tiếp rồi mới thử bằng analyst: khi đó bạn đã bỏ qua thời điểm quyền bị thu hồi.
+
+
+\begin{evidencebox}
+\textbf{E7:} chụp thông báo từ chối sau REVOKE.
+\end{evidencebox}
+
+\begin{questionbox}{Câu hỏi Q5.}
+Nếu analyst vẫn đọc được bảng sau REVOKE, bạn kiểm tra những nguồn quyền nào, theo thứ tự nào?
+\end{questionbox}
+
+\Needspace{10\baselineskip}
+\section{Job và danh tính Run as}
+
+Quản trị viên tạo một notebook ngôn ngữ SQL, ví dụ \texttt{/\allowbreak{}Shared/\allowbreak{}governance-\allowbreak{}lab/\allowbreak{}check\_\allowbreak{}silver}, với nội dung:
+
+
+\begin{aivncodebox}[language={}]{SQL}
+SELECT current_user() AS run_identity;
+
+SELECT COUNT(*) AS clean_rows, SUM(amount) AS total_amount
+FROM lab_governance.silver.orders_clean;
+\end{aivncodebox}
+
+Tạo một job gồm một notebook task trỏ đến notebook này, chọn compute hỗ trợ notebook task và Unity Catalog (serverless nếu workspace có). Trong phần \textbf{Run as}, chọn user kỹ sư; người cấu hình phải có quyền đặt danh tính Run as tương ứng, và user kỹ sư cần quyền đọc notebook. Xem \href{https://docs.databricks.com/aws/en/jobs/privileges}{quyền và danh tính của Jobs}.
+
+
+Chạy job một lần, mở run và trả lời:
+
+
+\begin{enumerate}
+\item Task có hoàn thành không?
+\item \texttt{run\_\allowbreak{}identity} hiển thị danh tính nào: người bấm chạy hay danh tính Run as?
+\item \texttt{clean\_\allowbreak{}rows} có bằng 3 và \texttt{total\_\allowbreak{}amount} có bằng 400.00 không?
+\end{enumerate}
+
+Task này chỉ đọc silver; nó chưa làm sạch bronze hay làm mới gold.
+
+
+\begin{evidencebox}
+\textbf{E8:} chụp trang run có kết quả của hai câu SELECT.
+\end{evidencebox}
+
+\begin{questionbox}{Câu hỏi Q6.}
+Quản trị viên bấm chạy job này. Nếu Run as là user analyst thay vì kỹ sư, task sẽ ra sao? Kết quả đó nói gì về quyền của người bấm chạy?
+\end{questionbox}
+
+\Needspace{10\baselineskip}
+\section{Ghi nhận kết quả và dọn dẹp}
+
+\Needspace{7\baselineskip}
+\subsection{Bảng ghi nhận}
+
+\begingroup\small
+\renewcommand{\arraystretch}{1.2}
+\begin{longtable}{@{}p{0.18\linewidth}p{0.32\linewidth}p{0.2\linewidth}p{0.2\linewidth}@{}}
+\toprule
+\rowcolor{rowLavender}
+\textbf{Danh tính} & \textbf{Phép thử} & \textbf{Kỳ vọng} & \textbf{Kết quả thực tế} \\
+\midrule
+\endfirsthead
+\toprule
+\rowcolor{rowLavender}
+\textbf{Danh tính} & \textbf{Phép thử} & \textbf{Kỳ vọng} & \textbf{Kết quả thực tế} \\
+\midrule
+\endhead
+\bottomrule
+\endfoot
+Kỹ sư & Đếm dòng bronze và silver & 5 và 3 & Điền sau khi chạy \\
+Kỹ sư & UPDATE bảng silver & Thành công & Điền sau khi chạy \\
+Kỹ sư & Tạo bảng thử trong silver & Thành công & Điền sau khi chạy \\
+Kỹ sư & Đọc bảng gold & Bị từ chối & Điền sau khi chạy \\
+Analyst & Đọc bảng gold & Hai dòng tổng hợp & Điền sau khi chạy \\
+Analyst & Đọc bronze, đọc silver & Đều bị từ chối & Điền sau khi chạy \\
+Analyst & DELETE dữ liệu gold & Bị từ chối & Điền sau khi chạy \\
+Analyst & Tạo bảng trong gold & Bị từ chối & Điền sau khi chạy \\
+Analyst sau REVOKE & Đọc bảng gold & Bị từ chối & Điền sau khi chạy \\
+Job chạy bằng kỹ sư & Kiểm tra silver & 3 dòng, tổng 400.00 & Điền sau khi chạy \\
+\end{longtable}
+\endgroup
+
+\Needspace{7\baselineskip}
+\subsection{Dọn dẹp}
+
+Khi đã nộp bằng chứng, quản trị viên xóa job, notebook và catalog lab cùng mọi đối tượng bên trong:
+
+
+\begin{aivncodebox}[language={}]{SQL}
+DROP CATALOG lab_governance CASCADE;
+\end{aivncodebox}
+
+Lệnh này xóa vĩnh viễn ba schema và các bảng managed trong catalog. Chỉ chạy trên catalog dành riêng cho lab.
+
+
+\Needspace{10\baselineskip}
+\section{Lỗi thường gặp và cách suy luận}
+
+\Needspace{12\baselineskip}
+\begingroup\small
+\renewcommand{\arraystretch}{1.2}
+\begin{longtable}{@{}p{0.32\linewidth}p{0.62\linewidth}@{}}
+\toprule
+\rowcolor{rowLavender}
+\textbf{Hiện tượng} & \textbf{Cách suy luận} \\
+\midrule
+\endfirsthead
+\toprule
+\rowcolor{rowLavender}
+\textbf{Hiện tượng} & \textbf{Cách suy luận} \\
+\midrule
+\endhead
+\bottomrule
+\endfoot
+Có SELECT nhưng vẫn không đọc được & Kiểm tra tên đầy đủ, \texttt{USE CATALOG}, \texttt{USE SCHEMA}, workspace binding của catalog và quyền dùng compute \\
+Analyst đọc được dữ liệu ngoài dự kiến & Kiểm tra \texttt{current\_\allowbreak{}user()}; xem user có phải owner, admin, thành viên nhóm kỹ sư hay nhóm khác; đối chiếu grant ở catalog, schema, table \\
+Đã REVOKE nhưng vẫn đọc được & Xác định grant vừa thu hồi; user có thể còn SELECT từ schema, catalog hoặc group khác; chắc chắn đang chạy bằng user analyst \\
+Notebook chạy được nhưng job thất bại & So sánh danh tính khi chạy tương tác với Run as; kiểm tra quyền notebook, compute và dữ liệu của danh tính thực thi; mở đúng run, đúng task \\
+Bronze thay đổi nhưng gold không đổi & Silver và gold tạo bằng CTAS; cần chạy lại logic biến đổi mà không nhân đôi bản ghi \\
+\texttt{CREATE CATALOG} báo thiếu vị trí lưu trữ & Metastore chưa có managed storage mặc định; quản trị viên cần chỉ định managed location hợp lệ \\
+\end{longtable}
+\endgroup
+
+\Needspace{10\baselineskip}
+\section{Bài tập mở rộng}
+
+\textbf{Bài tập A --- Thêm khu vực thử nghiệm.} Tạo schema \texttt{sandbox} để kỹ sư tự tạo bảng. Viết trước những quyền kỹ sư cần và dữ liệu họ được phép đọc làm đầu vào.
+
+
+\textbf{Bài tập B --- Thêm vai trò chỉ đọc.} Thiết kế nhóm chỉ được đọc một bảng cụ thể trong silver. So sánh SELECT trên bảng với SELECT trên toàn schema.
+
+
+\textbf{Bài tập C --- Tách danh tính tự động hóa.} Đề xuất quyền cho một service principal chạy job ở phần 8. Liệt kê quyền trên notebook, compute và bảng.
+
+
+\textbf{Bài tập D --- Tìm nguồn của quyền.} Tạo tình huống user nhận SELECT qua hai group, thu hồi từ một group rồi giải thích kết quả truy vấn.
+
+
+\textbf{Bài tập E --- Khám phá lineage.} Nếu workspace hỗ trợ và bạn có quyền, mở lineage của \texttt{daily\_\allowbreak{}sales} và đối chiếu với các câu CTAS ở phần 3.
+
+
+\section*{Tài liệu tham khảo}
+\addcontentsline{toc}{section}{Tài liệu tham khảo}
+
+\begin{itemize}
+\item \href{https://docs.databricks.com/aws/en/compute/}{Compute}
+\item \href{https://docs.databricks.com/aws/en/jobs/privileges}{Manage identities, permissions, and privileges for Lakeflow Jobs}
+\item \href{https://docs.databricks.com/aws/en/data-governance/unity-catalog/access-control/}{Access control in Unity Catalog}
+\item \href{https://docs.databricks.com/aws/en/data-governance/unity-catalog/access-control/privileges-reference}{Unity Catalog privileges reference}
+\item \href{https://docs.databricks.com/aws/en/data-governance/unity-catalog/manage-privileges/}{Manage privileges in Unity Catalog}
+\item \href{https://docs.databricks.com/aws/en/admin/users-groups/manage-groups}{Manage groups}
+\item \href{https://docs.databricks.com/aws/en/catalogs/create-catalog}{Create catalogs}
+\item \href{https://docs.databricks.com/aws/en/getting-started/free-edition-limitations}{Free Edition limitations}
+\item \href{https://docs.databricks.com/aws/en/data-governance/unity-catalog/data-lineage}{Lineage in Unity Catalog}
+\end{itemize}
